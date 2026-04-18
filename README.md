@@ -2,6 +2,8 @@
 
 브라우저에서 바로 즐길 수 있는 미니 게임 5종 모음. 별도 빌드·서버 없이 HTML 파일만 열면 동작합니다.
 
+**🎮 라이브 데모:** https://frescabreeze.github.io/mini-games-collection/
+
 ## 게임 목록
 
 | 게임 | 장르 | 조작 |
