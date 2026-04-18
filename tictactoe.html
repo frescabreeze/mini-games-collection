@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>틱택토 · 미니 게임 모음</title>
+<link rel="stylesheet" href="./assets/style.css">
+<style>
+  .ttt-board {
+    display: grid;
+    grid-template-columns: repeat(3, 92px);
+    grid-template-rows: repeat(3, 92px);
+    gap: 8px;
+    background: var(--border);
+    padding: 8px;
+    border-radius: var(--radius);
+  }
+  .ttt-cell {
+    background: var(--bg-soft);
+    border: none;
+    border-radius: 8px;
+    font-size: 48px;
+    font-weight: 700;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .ttt-cell:hover:not(:disabled) { background: var(--border); }
+  .ttt-cell.x { color: var(--accent); }
+  .ttt-cell.o { color: var(--warn); }
+  .ttt-cell.win { background: var(--success); color: #1e1e2e; }
+  .ttt-cell:disabled { cursor: default; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">미니 게임<span class="dot">.</span>모음</div>
+  <nav><a href="./index.html">← 게임 목록</a></nav>
+</header>
+<main class="app-main">
+  <h1 class="page-title">틱택토</h1>
+  <p class="page-subtitle">세 칸을 먼저 잇는 쪽이 승리! 가로·세로·대각선 상관없이.</p>
+
+  <div class="panel">
+    <div class="game-layout">
+      <div class="game-toolbar">
+        <label class="btn">
+          <input type="checkbox" id="ai-toggle"> vs 컴퓨터
+        </label>
+        <button class="btn primary" id="reset">새 게임</button>
+      </div>
+      <div class="game-status">
+        <span>차례: <strong id="turn">X</strong></span>
+        <span>X 승: <strong id="xw">0</strong></span>
+        <span>O 승: <strong id="ow">0</strong></span>
+        <span>무승부: <strong id="dr">0</strong></span>
+      </div>
+      <div class="ttt-board" id="board"></div>
+      <div class="game-message" id="msg"></div>
+    </div>
+  </div>
+</main>
+<footer class="app-footer">© Mini Games Collection</footer>
+
+<script>
+const boardEl = document.getElementById('board');
+const turnEl = document.getElementById('turn');
+const msgEl = document.getElementById('msg');
+const xwEl = document.getElementById('xw');
+const owEl = document.getElementById('ow');
+const drEl = document.getElementById('dr');
+const resetBtn = document.getElementById('reset');
+const aiToggle = document.getElementById('ai-toggle');
+
+const lines = [
+  [0,1,2],[3,4,5],[6,7,8],
+  [0,3,6],[1,4,7],[2,5,8],
+  [0,4,8],[2,4,6]
+];
+
+let cells = Array(9).fill('');
+let turn = 'X';
+let over = false;
+let stats = { X: 0, O: 0, D: 0 };
+
+function render() {
+  boardEl.innerHTML = '';
+  cells.forEach((v, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'ttt-cell' + (v ? ' ' + v.toLowerCase() : '');
+    btn.textContent = v;
+    btn.disabled = !!v || over;
+    btn.addEventListener('click', () => play(i));
+    boardEl.appendChild(btn);
+  });
+  turnEl.textContent = turn;
+}
+
+function checkWin(board) {
+  for (const [a,b,c] of lines) {
+    if (board[a] && board[a] === board[b] && board[b] === board[c]) {
+      return { winner: board[a], line: [a,b,c] };
+    }
+  }
+  if (board.every(v => v)) return { winner: 'D', line: [] };
+  return null;
+}
+
+function highlight(line) {
+  [...boardEl.children].forEach((el, i) => {
+    if (line.includes(i)) el.classList.add('win');
+  });
+}
+
+function finish(result) {
+  over = true;
+  if (result.winner === 'D') {
+    msgEl.textContent = '무승부입니다.';
+    msgEl.className = 'game-message warn';
+    stats.D++;
+    drEl.textContent = stats.D;
+  } else {
+    msgEl.textContent = `${result.winner} 승리!`;
+    msgEl.className = 'game-message';
+    stats[result.winner]++;
+    (result.winner === 'X' ? xwEl : owEl).textContent = stats[result.winner];
+    highlight(result.line);
+  }
+  [...boardEl.children].forEach(el => el.disabled = true);
+}
+
+function play(i) {
+  if (over || cells[i]) return;
+  cells[i] = turn;
+  const result = checkWin(cells);
+  render();
+  if (result) { finish(result); return; }
+  turn = turn === 'X' ? 'O' : 'X';
+  turnEl.textContent = turn;
+  if (aiToggle.checked && turn === 'O' && !over) {
+    setTimeout(aiMove, 250);
+  }
+}
+
+function aiMove() {
+  const empty = cells.map((v, i) => v ? -1 : i).filter(i => i >= 0);
+  if (!empty.length) return;
+  let choice = findBest('O') ?? findBest('X') ?? (empty.includes(4) ? 4 : empty[Math.floor(Math.random()*empty.length)]);
+  play(choice);
+}
+
+function findBest(mark) {
+  for (const [a,b,c] of lines) {
+    const trio = [cells[a], cells[b], cells[c]];
+    const marks = trio.filter(v => v === mark).length;
+    const blanks = trio.filter(v => !v).length;
+    if (marks === 2 && blanks === 1) {
+      return [a,b,c][trio.indexOf('')];
+    }
+  }
+  return null;
+}
+
+function reset() {
+  cells = Array(9).fill('');
+  turn = 'X';
+  over = false;
+  msgEl.textContent = '';
+  msgEl.className = 'game-message';
+  render();
+}
+
+resetBtn.addEventListener('click', reset);
+aiToggle.addEventListener('change', reset);
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스네이크 · 미니 게임 모음</title>
+<link rel="stylesheet" href="./assets/style.css">
+<style>
+  #snake-canvas {
+    background: var(--bg-soft);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: block;
+  }
+  .speed-select {
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 14px;
+  }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">미니 게임<span class="dot">.</span>모음</div>
+  <nav><a href="./index.html">← 게임 목록</a></nav>
+</header>
+<main class="app-main">
+  <h1 class="page-title">스네이크</h1>
+  <p class="page-subtitle">
+    방향키(<span class="kbd">↑</span><span class="kbd">↓</span><span class="kbd">←</span><span class="kbd">→</span>)로 뱀을 조종해 먹이를 먹고 길이를 늘려 보세요. <span class="kbd">Space</span>로 일시정지.
+  </p>
+
+  <div class="panel">
+    <div class="game-layout">
+      <div class="game-toolbar">
+        <select class="speed-select" id="speed">
+          <option value="140">느림</option>
+          <option value="100" selected>보통</option>
+          <option value="70">빠름</option>
+          <option value="45">매우 빠름</option>
+        </select>
+        <button class="btn primary" id="reset">새 게임</button>
+      </div>
+      <div class="game-status">
+        <span>점수: <strong id="score">0</strong></span>
+        <span>최고점: <strong id="best">0</strong></span>
+      </div>
+      <canvas id="snake-canvas" width="400" height="400"></canvas>
+      <div class="game-message" id="msg"></div>
+    </div>
+  </div>
+</main>
+<footer class="app-footer">© Mini Games Collection</footer>
+
+<script>
+const canvas = document.getElementById('snake-canvas');
+const ctx = canvas.getContext('2d');
+const GRID = 20;
+const CELL = canvas.width / GRID;
+const scoreEl = document.getElementById('score');
+const bestEl = document.getElementById('best');
+const msgEl = document.getElementById('msg');
+const resetBtn = document.getElementById('reset');
+const speedEl = document.getElementById('speed');
+
+let snake, dir, nextDir, food, score, best, over, paused, tickId, tickMs;
+
+function init() {
+  snake = [{x:10, y:10}, {x:9, y:10}, {x:8, y:10}];
+  dir = {x:1, y:0};
+  nextDir = dir;
+  spawnFood();
+  score = 0;
+  over = false;
+  paused = false;
+  best = +(localStorage.getItem('snake_best') || 0);
+  bestEl.textContent = best;
+  scoreEl.textContent = 0;
+  msgEl.textContent = '';
+  msgEl.className = 'game-message';
+  tickMs = +speedEl.value;
+  clearInterval(tickId);
+  tickId = setInterval(tick, tickMs);
+  draw();
+}
+
+function spawnFood() {
+  while (true) {
+    const f = { x: Math.floor(Math.random()*GRID), y: Math.floor(Math.random()*GRID) };
+    if (!snake.some(s => s.x===f.x && s.y===f.y)) { food = f; return; }
+  }
+}
+
+function tick() {
+  if (over || paused) return;
+  dir = nextDir;
+  const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+  if (head.x<0 || head.x>=GRID || head.y<0 || head.y>=GRID || snake.some(s => s.x===head.x && s.y===head.y)) {
+    over = true;
+    msgEl.textContent = '게임 오버! 새 게임을 눌러 다시 시작하세요.';
+    msgEl.className = 'game-message danger';
+    clearInterval(tickId);
+    if (score > best) {
+      best = score;
+      localStorage.setItem('snake_best', best);
+      bestEl.textContent = best;
+    }
+    draw();
+    return;
+  }
+  snake.unshift(head);
+  if (head.x === food.x && head.y === food.y) {
+    score += 10;
+    scoreEl.textContent = score;
+    spawnFood();
+  } else {
+    snake.pop();
+  }
+  draw();
+}
+
+function draw() {
+  ctx.fillStyle = '#313244';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = '#f38ba8';
+  ctx.beginPath();
+  ctx.arc(food.x*CELL + CELL/2, food.y*CELL + CELL/2, CELL/2 - 2, 0, Math.PI*2);
+  ctx.fill();
+
+  snake.forEach((s, i) => {
+    ctx.fillStyle = i === 0 ? '#b4befe' : '#89b4fa';
+    ctx.fillRect(s.x*CELL + 1, s.y*CELL + 1, CELL - 2, CELL - 2);
+  });
+
+  if (paused && !over) {
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#cdd6f4';
+    ctx.font = '20px Segoe UI, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('일시정지', canvas.width/2, canvas.height/2);
+  }
+}
+
+document.addEventListener('keydown', e => {
+  const map = {
+    ArrowUp: {x:0,y:-1}, ArrowDown: {x:0,y:1},
+    ArrowLeft: {x:-1,y:0}, ArrowRight: {x:1,y:0}
+  };
+  if (map[e.key]) {
+    e.preventDefault();
+    const d = map[e.key];
+    if (d.x === -dir.x && d.y === -dir.y) return;
+    nextDir = d;
+  } else if (e.key === ' ') {
+    e.preventDefault();
+    if (!over) { paused = !paused; draw(); }
+  }
+});
+
+resetBtn.addEventListener('click', init);
+speedEl.addEventListener('change', () => {
+  tickMs = +speedEl.value;
+  if (!over) {
+    clearInterval(tickId);
+    tickId = setInterval(tick, tickMs);
+  }
+});
+
+init();
+</script>
+</body>
+</html>

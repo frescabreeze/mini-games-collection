@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>지뢰찾기 · 미니 게임 모음</title>
+<link rel="stylesheet" href="./assets/style.css">
+<style>
+  .ms-frame {
+    background: #bdbdbd;
+    border: 3px solid;
+    border-color: #7b7b7b #fff #fff #7b7b7b;
+    padding: 10px;
+    display: inline-block;
+  }
+  .ms-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    background: #000;
+    color: #f00;
+    padding: 6px 10px;
+    font-family: "Courier New", monospace;
+    font-weight: bold;
+    font-size: 20px;
+    border: 2px inset #7b7b7b;
+    gap: 12px;
+  }
+  .ms-info button {
+    font-size: 20px;
+    width: 40px;
+    height: 40px;
+    background: #bdbdbd;
+    border: 3px outset #fff;
+    cursor: pointer;
+  }
+  .ms-info button:active { border-style: inset; }
+  #board {
+    display: grid;
+    gap: 0;
+    background: #7b7b7b;
+    border: 3px solid;
+    border-color: #7b7b7b #fff #fff #7b7b7b;
+    user-select: none;
+  }
+  .cell {
+    width: 28px;
+    height: 28px;
+    background: #bdbdbd;
+    border: 3px outset #fff;
+    font-weight: bold;
+    font-size: 16px;
+    text-align: center;
+    line-height: 22px;
+    cursor: pointer;
+    box-sizing: border-box;
+    color: #000;
+  }
+  .cell.revealed {
+    border: 1px solid #7b7b7b;
+    background: #d1d1d1;
+    cursor: default;
+  }
+  .cell.mine { background: #f44; }
+  .c1 { color: #0000ff; }
+  .c2 { color: #008000; }
+  .c3 { color: #ff0000; }
+  .c4 { color: #000080; }
+  .c5 { color: #800000; }
+  .c6 { color: #008080; }
+  .c7 { color: #000000; }
+  .c8 { color: #808080; }
+</style>
+</head>
+<body>
+<header class="app-header">
+  <div class="brand">미니 게임<span class="dot">.</span>모음</div>
+  <nav><a href="./index.html">← 게임 목록</a></nav>
+</header>
+<main class="app-main">
+  <h1 class="page-title">지뢰찾기</h1>
+  <p class="page-subtitle">좌클릭으로 열고, 우클릭으로 깃발. 숫자 칸 클릭 시 주변이 자동으로 열립니다.</p>
+
+  <div class="panel">
+    <div class="game-layout">
+      <div class="game-toolbar">
+        <button class="btn" data-level="easy">초급 (9×9, 10)</button>
+        <button class="btn" data-level="medium">중급 (16×16, 40)</button>
+        <button class="btn" data-level="hard">고급 (30×16, 99)</button>
+      </div>
+      <div class="ms-frame">
+        <div class="ms-info">
+          <span id="mines">000</span>
+          <button id="reset">🙂</button>
+          <span id="timer">000</span>
+        </div>
+        <div id="board"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<footer class="app-footer">© Mini Games Collection</footer>
+
+<script>
+const levels = {
+  easy:   { rows: 9,  cols: 9,  mines: 10 },
+  medium: { rows: 16, cols: 16, mines: 40 },
+  hard:   { rows: 16, cols: 30, mines: 99 }
+};
+
+let rows, cols, mineCount;
+let board = [];
+let revealed = [];
+let flagged = [];
+let gameOver = false;
+let firstClick = true;
+let revealedCount = 0;
+let timer = 0;
+let timerId = null;
+
+const boardEl = document.getElementById('board');
+const minesEl = document.getElementById('mines');
+const timerEl = document.getElementById('timer');
+const resetBtn = document.getElementById('reset');
+
+function pad(n) { return String(n).padStart(3, '0'); }
+
+function init(level = 'easy') {
+  const cfg = levels[level];
+  rows = cfg.rows; cols = cfg.cols; mineCount = cfg.mines;
+  board = Array.from({length: rows}, () => Array(cols).fill(0));
+  revealed = Array.from({length: rows}, () => Array(cols).fill(false));
+  flagged = Array.from({length: rows}, () => Array(cols).fill(false));
+  gameOver = false;
+  firstClick = true;
+  revealedCount = 0;
+  timer = 0;
+  clearInterval(timerId);
+  timerId = null;
+  timerEl.textContent = pad(0);
+  minesEl.textContent = pad(mineCount);
+  resetBtn.textContent = '🙂';
+  render();
+}
+
+function placeMines(sr, sc) {
+  let placed = 0;
+  while (placed < mineCount) {
+    const r = Math.floor(Math.random() * rows);
+    const c = Math.floor(Math.random() * cols);
+    if (board[r][c] === -1) continue;
+    if (Math.abs(r - sr) <= 1 && Math.abs(c - sc) <= 1) continue;
+    board[r][c] = -1;
+    placed++;
+  }
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (board[r][c] === -1) continue;
+      let n = 0;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          const nr = r+dr, nc = c+dc;
+          if (nr>=0 && nr<rows && nc>=0 && nc<cols && board[nr][nc] === -1) n++;
+        }
+      }
+      board[r][c] = n;
+    }
+  }
+}
+
+function render() {
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, 28px)`;
+  boardEl.innerHTML = '';
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+      cell.dataset.r = r;
+      cell.dataset.c = c;
+      if (revealed[r][c]) {
+        cell.classList.add('revealed');
+        if (board[r][c] === -1) {
+          cell.classList.add('mine');
+          cell.textContent = '💣';
+        } else if (board[r][c] > 0) {
+          cell.textContent = board[r][c];
+          cell.classList.add('c' + board[r][c]);
+        }
+      } else if (flagged[r][c]) {
+        cell.textContent = '🚩';
+      }
+      cell.addEventListener('click', onLeftClick);
+      cell.addEventListener('contextmenu', onRightClick);
+      boardEl.appendChild(cell);
+    }
+  }
+  const flagCount = flagged.flat().filter(Boolean).length;
+  minesEl.textContent = pad(Math.max(0, mineCount - flagCount));
+}
+
+function startTimer() {
+  if (timerId) return;
+  timerId = setInterval(() => {
+    timer++;
+    timerEl.textContent = pad(Math.min(timer, 999));
+  }, 1000);
+}
+
+function reveal(r, c) {
+  if (r<0||r>=rows||c<0||c>=cols) return;
+  if (revealed[r][c] || flagged[r][c]) return;
+  revealed[r][c] = true;
+  revealedCount++;
+  if (board[r][c] === 0) {
+    for (let dr=-1; dr<=1; dr++)
+      for (let dc=-1; dc<=1; dc++)
+        if (dr||dc) reveal(r+dr, c+dc);
+  }
+}
+
+function onLeftClick(e) {
+  if (gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (flagged[r][c]) return;
+  if (firstClick) {
+    placeMines(r, c);
+    firstClick = false;
+    startTimer();
+  }
+  if (revealed[r][c]) {
+    chord(r, c);
+  } else {
+    if (board[r][c] === -1) {
+      revealAllMines();
+      gameOver = true;
+      clearInterval(timerId);
+      resetBtn.textContent = '😵';
+      render();
+      return;
+    }
+    reveal(r, c);
+  }
+  render();
+  checkWin();
+}
+
+function chord(r, c) {
+  const n = board[r][c];
+  if (n <= 0) return;
+  let flags = 0;
+  for (let dr=-1; dr<=1; dr++)
+    for (let dc=-1; dc<=1; dc++) {
+      const nr=r+dr, nc=c+dc;
+      if (nr>=0&&nr<rows&&nc>=0&&nc<cols&&flagged[nr][nc]) flags++;
+    }
+  if (flags !== n) return;
+  for (let dr=-1; dr<=1; dr++)
+    for (let dc=-1; dc<=1; dc++) {
+      const nr=r+dr, nc=c+dc;
+      if (nr<0||nr>=rows||nc<0||nc>=cols) continue;
+      if (revealed[nr][nc] || flagged[nr][nc]) continue;
+      if (board[nr][nc] === -1) {
+        revealAllMines();
+        gameOver = true;
+        clearInterval(timerId);
+        resetBtn.textContent = '😵';
+        return;
+      }
+      reveal(nr, nc);
+    }
+}
+
+function onRightClick(e) {
+  e.preventDefault();
+  if (gameOver) return;
+  const r = +e.currentTarget.dataset.r;
+  const c = +e.currentTarget.dataset.c;
+  if (revealed[r][c]) return;
+  flagged[r][c] = !flagged[r][c];
+  render();
+}
+
+function revealAllMines() {
+  for (let r=0; r<rows; r++)
+    for (let c=0; c<cols; c++)
+      if (board[r][c] === -1) revealed[r][c] = true;
+}
+
+function checkWin() {
+  if (revealedCount === rows*cols - mineCount) {
+    gameOver = true;
+    clearInterval(timerId);
+    resetBtn.textContent = '😎';
+    for (let r=0; r<rows; r++)
+      for (let c=0; c<cols; c++)
+        if (board[r][c] === -1) flagged[r][c] = true;
+    render();
+  }
+}
+
+resetBtn.addEventListener('click', () => init(currentLevel));
+let currentLevel = 'easy';
+document.querySelectorAll('.game-toolbar button[data-level]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    currentLevel = btn.dataset.level;
+    init(currentLevel);
+  });
+});
+
+init('easy');
+</script>
+</body>
+</html>
